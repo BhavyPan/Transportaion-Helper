@@ -19,7 +19,7 @@
     --popover-foreground: 0 0% 100%;
 
     --primary: 70 100% 50%;
-    /* Lando Norris Neon Yellow/Green */
+    /* Transportation Helper neon yellow/green */
     --primary-foreground: 0 0% 0%;
     /* Black text on neon */
 
@@ -134,7 +134,7 @@
     @apply status-pill bg-destructive/15 text-destructive;
   }
 
-  /* Lando Norris Custom Aesthetics */
+  /* Transportation Helper custom aesthetics */
   .glass {
     background:
       linear-gradient(135deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.028) 44%, rgba(204, 255, 0, 0.045)),

@@ -36,7 +36,7 @@ export default function Login() {
             if (isLogin) {
                 const result = await login(email, password);
                 if (result.success) {
-                    toast({ title: "Login Successful", description: "Welcome back to FleetFlow.", variant: "default" });
+                    toast({ title: "Login Successful", description: "Welcome back to Transportation Helper.", variant: "default" });
                     navigate("/");
                 } else {
                     toast({ title: "Login Failed", description: result.error, variant: "destructive" });
@@ -72,14 +72,14 @@ export default function Login() {
                         <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20" style={{ boxShadow: "0 0 15px rgba(204,255,0,0.5)" }}>
                             <div className="h-3 w-3 rounded-full bg-primary" style={{ boxShadow: "0 0 10px rgba(204,255,0,0.8)" }} />
                         </div>
-                        <h2 className="text-xl font-black tracking-tighter text-white uppercase text-glow">FleetFlow</h2>
+                        <h2 className="text-xl font-black tracking-tighter text-white uppercase text-glow">Transportation Helper</h2>
                     </div>
 
                     <CardTitle className="text-3xl font-black text-white uppercase tracking-tighter text-center">
                         {isLogin ? "System Access" : "Initialize Account"}
                     </CardTitle>
                     <CardDescription className="text-primary uppercase tracking-[0.2em] font-bold text-[10px] sm:text-xs mt-2 text-center text-glow">
-                        {isLogin ? "Enter credentials to access command center" : "Register identity for FleetFlow clearance"}
+                        {isLogin ? "Enter credentials to access command center" : "Register identity for Transportation Helper clearance"}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

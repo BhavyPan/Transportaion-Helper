@@ -129,7 +129,7 @@ begin
   values (
     new.id,
     coalesce(new.email, ''),
-    coalesce(new.raw_user_meta_data ->> 'name', split_part(coalesce(new.email, ''), '@', 1), 'FleetFlow User'),
+    coalesce(new.raw_user_meta_data ->> 'name', split_part(coalesce(new.email, ''), '@', 1), 'Transportation Helper User'),
     coalesce((new.raw_user_meta_data ->> 'role')::public.app_role, 'Manager')
   )
   on conflict (id) do update set

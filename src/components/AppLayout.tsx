@@ -46,7 +46,7 @@ export default function AppLayout() {
               <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20 transition-all duration-300 group-hover:scale-110 group-hover:bg-primary/20 group-hover:border-primary/50" style={{ boxShadow: "0 0 15px rgba(204,255,0,0.5)" }}>
                 <div className="h-3 w-3 rounded-full bg-primary" style={{ boxShadow: "0 0 10px rgba(204,255,0,0.8)" }} />
               </div>
-              <h2 className="text-xl font-black tracking-tighter text-white uppercase group-hover:text-glow transition-all duration-300">FleetFlow</h2>
+              <h2 className="text-xl font-black tracking-tighter text-white uppercase group-hover:text-glow transition-all duration-300">Transportation Helper</h2>
             </div>
 
             <div className="flex items-center gap-6">

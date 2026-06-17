@@ -84,9 +84,9 @@ export default function Dashboard() {
               Live Telemetry Active
             </div>
 
-            <h1 className="text-white font-black uppercase leading-[0.9] text-glow mix-blend-screen" style={{ fontSize: "clamp(3.2rem, 8vw, 8.5rem)" }}>
-              FleetFlow<br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-b from-white to-white/25">Command</span>
+            <h1 className="text-white font-black uppercase leading-[0.9] text-glow mix-blend-screen" style={{ fontSize: "clamp(2rem, 7vw, 7.5rem)" }}>
+              Transportation<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-b from-white to-white/25">Helper</span>
             </h1>
 
             <p className="mt-7 max-w-2xl text-sm font-bold uppercase leading-relaxed tracking-[0.14em] text-white/[0.66] md:text-base">
