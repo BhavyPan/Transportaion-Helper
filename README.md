@@ -35,7 +35,7 @@ This project is built with:
 The site records each authenticated user ID once per day through the Dockerized
 Daily Unique Visitor Counter. Different accounts count separately, while repeat
 visits by the same account do not increase the daily unique count. Start the counter from
-`C:\Users\Bhavy\Documents\counter\daily-visitor-counter`:
+the repository's `daily-visitor-counter` directory:
 
 ```sh
 docker compose up -d --build
@@ -111,4 +111,20 @@ Google returns to Supabase first, then Supabase returns to this application.
 
 ## Deployment
 
-Build the app with `npm run build` and deploy the generated `dist` directory with your hosting provider.
+The Vite frontend is deployed on Vercel. The repository's `render.yaml` Blueprint
+defines a public Docker API and a private Redis-compatible Render Key Value service.
+
+To enable analytics on the live website:
+
+1. In Render, create a new Blueprint and connect this GitHub repository.
+2. Deploy the `daily-visitor-counter-api` and `daily-visitor-counter-redis` services.
+3. Copy the API's generated `https://...onrender.com` URL.
+4. In Vercel, set `VITE_VISITOR_API_URL` to that URL for Production.
+5. Redeploy the Vercel project so Vite includes the environment variable in its build.
+
+The Blueprint uses free Render services to avoid automatically selecting a paid
+plan. Render's free Key Value service does not provide disk persistence. Select a
+paid Key Value plan in Render when persistent production analytics are required.
+
+Build the frontend locally with `npm run build`. Vercel serves the generated Vite
+application and uses `vercel.json` to route React paths such as `/auth/callback`.

@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: daily-visitor-counter-api
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./daily-visitor-counter/Dockerfile
+    dockerContext: ./daily-visitor-counter
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 30
+    autoDeployTrigger: commit
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: daily-visitor-counter-redis
+          property: connectionString
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      - key: RETENTION_DAYS
+        value: 30
+      - key: ALLOWED_ORIGINS
+        value: https://transportaion-helper.vercel.app
+
+  - type: keyvalue
+    name: daily-visitor-counter-redis
+    plan: free
+    region: singapore
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
