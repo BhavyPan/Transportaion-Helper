@@ -3,6 +3,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import { useFleet } from "@/context/FleetContext";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
+import { fetchTodayVisitorStats } from "@/lib/visitorAnalytics";
 
 const COLORS = ["hsl(152, 60%, 42%)", "hsl(210, 80%, 55%)", "hsl(38, 92%, 50%)", "hsl(220, 10%, 60%)"];
 
@@ -21,6 +23,12 @@ const SIMULATED_ACQUISITION_COST = {
 
 export default function Analytics() {
   const { vehicles, fuelLogs, maintenanceLogs, trips } = useFleet();
+  const visitorStats = useQuery({
+    queryKey: ["daily-visitor-stats", "today"],
+    queryFn: fetchTodayVisitorStats,
+    refetchInterval: 30_000,
+    retry: 1,
+  });
 
   // Vehicle status distribution
   const statusCounts: Record<string, number> = {
@@ -191,6 +199,41 @@ export default function Analytics() {
             </div>
           </motion.div>
         </motion.div>
+
+        <section className="mb-12 border-y border-white/10 bg-black/30 py-6">
+          <div className="flex flex-col gap-2 px-6 pb-6 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase text-primary">Daily Visitor Counter</p>
+              <h2 className="mt-1 text-2xl font-black uppercase text-white">Website Audience</h2>
+            </div>
+            <p className="text-sm text-white/50">
+              {visitorStats.data?.date || "Waiting for Docker analytics"}
+            </p>
+          </div>
+
+          {visitorStats.isError ? (
+            <p className="border-t border-white/10 px-6 pt-6 text-sm text-destructive">
+              Visitor analytics is unavailable. Check that the Docker counter is running.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 border-t border-white/10 md:grid-cols-4">
+              {[
+                ["Estimated unique", visitorStats.data?.estimatedUniqueVisitors ?? 0],
+                ["Exact unique", visitorStats.data?.exactUniqueVisitors ?? 0],
+                ["Difference", visitorStats.data?.difference ?? 0],
+                ["Error percentage", `${visitorStats.data?.errorPercentage ?? 0}%`],
+              ].map(([label, value], index) => (
+                <div
+                  key={label}
+                  className={`min-h-28 px-6 py-5 ${index % 2 ? "border-l" : ""} border-white/10 md:border-l md:first:border-l-0`}
+                >
+                  <p className="text-xs font-bold uppercase text-white/40">{label}</p>
+                  <p className="mt-3 text-3xl font-black text-white">{value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         {/* Charts Grid */}
         <motion.div

@@ -7,19 +7,20 @@ import {
   Users,
   Wrench,
   BarChart3,
+  type LucideIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth, Role } from "@/context/AuthContext";
 
 type NavItem = {
   to: string;
-  icon: any;
+  icon: LucideIcon;
   label: string;
   allowedRoles: Role[];
 };
 
 const navItems: NavItem[] = [
-  { to: "/", icon: LayoutDashboard, label: "Command Center", allowedRoles: ["Manager", "Dispatcher", "Safety Officer", "Finance"] },
+  { to: "/dashboard", icon: LayoutDashboard, label: "Command Center", allowedRoles: ["User", "Manager", "Dispatcher", "Safety Officer", "Finance"] },
   { to: "/vehicles", icon: Truck, label: "Vehicle Registry", allowedRoles: ["Manager", "Dispatcher", "Safety Officer"] },
   { to: "/trips", icon: Route, label: "Trip Dispatcher", allowedRoles: ["Manager", "Dispatcher"] },
   { to: "/drivers", icon: Users, label: "Driver Profiles", allowedRoles: ["Manager", "Dispatcher", "Safety Officer"] },

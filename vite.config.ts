@@ -7,6 +7,13 @@ export default defineConfig({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      "/visitor-api": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+        rewrite: (requestPath) => requestPath.replace(/^\/visitor-api/, ""),
+      },
+    },
     hmr: {
       overlay: false,
     },

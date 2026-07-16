@@ -1,7 +1,7 @@
 create extension if not exists pgcrypto;
 
 do $$ begin
-  create type public.app_role as enum ('Manager', 'Dispatcher', 'Safety Officer', 'Finance');
+  create type public.app_role as enum ('User', 'Manager', 'Dispatcher', 'Safety Officer', 'Finance');
 exception
   when duplicate_object then null;
 end $$;
@@ -10,7 +10,7 @@ create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text unique not null,
   name text not null,
-  role public.app_role not null default 'Manager',
+  role public.app_role not null default 'User',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -129,13 +129,12 @@ begin
   values (
     new.id,
     coalesce(new.email, ''),
-    coalesce(new.raw_user_meta_data ->> 'name', split_part(coalesce(new.email, ''), '@', 1), 'Transportation Helper User'),
-    coalesce((new.raw_user_meta_data ->> 'role')::public.app_role, 'Manager')
+    coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name', split_part(coalesce(new.email, ''), '@', 1), 'Transportation Helper User'),
+    'User'
   )
   on conflict (id) do update set
     email = excluded.email,
-    name = excluded.name,
-    role = excluded.role;
+    name = excluded.name;
 
   return new;
 end;

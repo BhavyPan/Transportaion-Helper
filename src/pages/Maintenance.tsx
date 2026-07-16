@@ -79,7 +79,7 @@ export default function Maintenance() {
       description: serviceFormData.description,
       cost: serviceFormData.cost || 0,
       date: serviceFormData.date || new Date().toISOString().split("T")[0],
-      status: serviceFormData.status as any
+      status: serviceFormData.status || "In Progress"
     });
     toast({ title: "Service Logged", description: "Vehicle status automatically set to 'In Shop'." });
     setIsServiceDialogOpen(false);

@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { getSupabaseConfigError, supabase } from "@/lib/supabase";
+import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 
-export type Role = "Manager" | "Dispatcher" | "Safety Officer" | "Finance";
+export type Role = "User" | "Manager" | "Dispatcher" | "Safety Officer" | "Finance";
 
 export interface User {
     id: string;
@@ -9,13 +10,15 @@ export interface User {
     password?: string;
     name: string;
     role: Role;
+    avatarUrl?: string;
 }
 
 interface AuthContextType {
     user: User | null;
     login: (email: string, password?: string) => Promise<{ success: boolean, error?: string }>;
-    signup: (email: string, password: string, name: string, role: Role) => Promise<{ success: boolean, error?: string }>;
-    logout: () => void;
+    loginWithGoogle: () => Promise<{ success: boolean, error?: string }>;
+    signup: (email: string, password: string, name: string) => Promise<{ success: boolean, error?: string }>;
+    logout: () => Promise<void>;
     isAuthenticated: boolean;
 }
 
@@ -28,12 +31,65 @@ type ProfileRow = {
     role: Role;
 };
 
-const toUser = (profile: ProfileRow): User => ({
+const getAvatarUrl = (authUser: SupabaseAuthUser) => {
+    const avatarUrl = authUser.user_metadata.avatar_url ?? authUser.user_metadata.picture;
+    return typeof avatarUrl === "string" ? avatarUrl : undefined;
+};
+
+const getDisplayName = (authUser: SupabaseAuthUser) => {
+    const displayName = authUser.user_metadata.full_name ?? authUser.user_metadata.name;
+    if (typeof displayName === "string" && displayName.trim()) return displayName.trim();
+    return authUser.email?.split("@")[0] || "Transportation Helper User";
+};
+
+const toUser = (profile: ProfileRow, authUser: SupabaseAuthUser): User => ({
     id: profile.id,
     email: profile.email,
     name: profile.name,
     role: profile.role,
+    avatarUrl: getAvatarUrl(authUser),
 });
+
+async function loadProfile(authUser: SupabaseAuthUser) {
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+        .from("profiles")
+        .select("id,email,name,role")
+        .eq("id", authUser.id)
+        .maybeSingle();
+
+    if (error) {
+        console.error("Failed to load user profile", error);
+        return null;
+    }
+
+    if (data) return toUser(data as ProfileRow, authUser);
+
+    if (!authUser.email) {
+        console.error("Cannot create a profile without an authenticated email");
+        return null;
+    }
+
+    const safeProfile: ProfileRow = {
+        id: authUser.id,
+        email: authUser.email,
+        name: getDisplayName(authUser),
+        role: "User",
+    };
+    const { data: createdProfile, error: createError } = await supabase
+        .from("profiles")
+        .insert(safeProfile)
+        .select("id,email,name,role")
+        .single();
+
+    if (createError || !createdProfile) {
+        console.error("Failed to create a safe user profile", createError);
+        return null;
+    }
+
+    return toUser(createdProfile as ProfileRow, authUser);
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
@@ -42,36 +98,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         let isMounted = true;
 
-        const loadProfile = async (userId: string) => {
-            if (!supabase) {
-                return null;
-            }
-
-            const { data, error } = await supabase
-                .from("profiles")
-                .select("id,email,name,role")
-                .eq("id", userId)
-                .single();
-
-            if (error || !data) {
-                console.error("Failed to load user profile", error);
-                return null;
-            }
-
-            return toUser(data as ProfileRow);
-        };
-
         const initializeAuth = async () => {
             if (!supabase) {
                 setLoading(false);
                 return;
             }
 
-            const { data } = await supabase.auth.getSession();
-            const sessionUser = data.session?.user;
+            const { data, error } = await supabase.auth.getUser();
 
-            if (sessionUser && isMounted) {
-                setUser(await loadProfile(sessionUser.id));
+            if (error) {
+                console.error("Failed to validate the current session", error);
+            }
+
+            if (data.user && isMounted) {
+                setUser(await loadProfile(data.user));
             }
 
             if (isMounted) {
@@ -81,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         initializeAuth();
 
-        const { data: listener } = supabase?.auth.onAuthStateChange(async (_event, session) => {
+        const { data: listener } = supabase?.auth.onAuthStateChange((_event, session) => {
             if (!isMounted) return;
 
             if (!session?.user) {
@@ -89,7 +129,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return;
             }
 
-            setUser(await loadProfile(session.user.id));
+            void loadProfile(session.user).then(profile => {
+                if (isMounted) setUser(profile);
+            });
         }) ?? { data: null };
 
         return () => {
@@ -103,30 +145,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return { success: false, error: getSupabaseConfigError() };
         }
 
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { error } = await supabase.auth.signInWithPassword({
             email,
             password: password ?? "",
         });
 
-        if (error || !data.user) {
-            return { success: false, error: error?.message ?? "Invalid email or password." };
+        if (error) {
+            console.error("Email login failed", error);
+            return { success: false, error: "Invalid email or password." };
         }
 
-        const { data: profile, error: profileError } = await supabase
-            .from("profiles")
-            .select("id,email,name,role")
-            .eq("id", data.user.id)
-            .single();
+        const { data: validatedUser, error: validationError } = await supabase.auth.getUser();
 
-        if (profileError || !profile) {
-            return { success: false, error: profileError?.message ?? "Unable to load user profile." };
+        if (validationError || !validatedUser.user) {
+            console.error("Unable to validate email login", validationError);
+            return { success: false, error: "Unable to validate your account." };
         }
 
-        setUser(toUser(profile as ProfileRow));
+        const profile = await loadProfile(validatedUser.user);
+        if (!profile) return { success: false, error: "Unable to load your user profile." };
+
+        setUser(profile);
         return { success: true };
     };
 
-    const signup = async (email: string, password: string, name: string, role: Role) => {
+    const loginWithGoogle = async () => {
+        if (!supabase) {
+            return { success: false, error: getSupabaseConfigError() };
+        }
+
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                redirectTo: `${window.location.origin}/auth/callback`,
+            },
+        });
+
+        if (error) {
+            console.error("Google OAuth failed to start", error);
+            return { success: false, error: "Unable to start Google sign-in. Please try again." };
+        }
+
+        return { success: true };
+    };
+
+    const signup = async (email: string, password: string, name: string) => {
         if (!supabase) {
             return { success: false, error: getSupabaseConfigError() };
         }
@@ -135,36 +198,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             email,
             password,
             options: {
-                data: { name, role },
+                data: { name },
+                emailRedirectTo: `${window.location.origin}/auth/callback`,
             },
         });
 
         if (error || !data.user) {
-            return { success: false, error: error?.message ?? "Unable to create account." };
+            console.error("Email signup failed", error);
+            return { success: false, error: "Unable to create account. Check your details and try again." };
         }
 
         if (!data.session) {
             return { success: false, error: "Account created. Confirm your email, then sign in." };
         }
 
-        const profile: User = {
-            id: data.user.id,
-            email,
-            name,
-            role,
-        };
-
-        const { error: profileError } = await supabase.from("profiles").upsert(profile);
-        if (profileError) {
-            return { success: false, error: profileError.message };
-        }
+        const profile = await loadProfile(data.user);
+        if (!profile) return { success: false, error: "Unable to create your user profile." };
 
         setUser(profile);
         return { success: true };
     };
 
     const logout = async () => {
-        await supabase?.auth.signOut();
+        const { error } = await supabase?.auth.signOut() ?? { error: null };
+        if (error) console.error("Logout failed", error);
         setUser(null);
     };
 
@@ -173,7 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return (
-        <AuthContext.Provider value={{ user, login, signup, logout, isAuthenticated: !!user }}>
+        <AuthContext.Provider value={{ user, login, loginWithGoogle, signup, logout, isAuthenticated: !!user }}>
             {children}
         </AuthContext.Provider>
     );

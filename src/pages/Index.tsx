@@ -51,7 +51,7 @@ export default function Dashboard() {
   const recentTrips = [...trips].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
   const fleetHealth = Math.round(((available + activeFleet) / vehicles.length) * 100) || 0;
   const completedTrips = trips.filter(t => t.status === "Completed").length;
-  const inProgressTrips = trips.filter(t => t.status === "In Progress").length;
+  const inProgressTrips = trips.filter(t => t.status === "Dispatched").length;
   const roleCards = [
     { role: "Manager", metric: `${utilization}%`, label: "utilization", icon: ShieldCheck },
     { role: "Dispatcher", metric: activeFleet, label: "active routes", icon: Route },

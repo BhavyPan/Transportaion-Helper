@@ -15,6 +15,8 @@ import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 import Login from "./pages/Login";
 import { AnimatePresence, motion } from "framer-motion";
+import VisitorTracker from "@/components/VisitorTracker";
+import AuthCallback from "@/pages/AuthCallback";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +26,7 @@ const AnimatedRoutes = () => {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/login" element={
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
             <Login />
@@ -32,6 +35,11 @@ const AnimatedRoutes = () => {
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
           {/* Command Center: All Roles */}
           <Route path="/" element={
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
+              <Index />
+            </motion.div>
+          } />
+          <Route path="/dashboard" element={
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }}>
               <Index />
             </motion.div>
@@ -91,6 +99,7 @@ const AnimatedRoutes = () => {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
+      <VisitorTracker />
       <FleetProvider>
         <TooltipProvider>
           <Toaster />

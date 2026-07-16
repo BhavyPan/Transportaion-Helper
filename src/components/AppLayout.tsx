@@ -1,4 +1,4 @@
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useNavigate } from "react-router-dom";
 import { useAuth, Role } from "@/context/AuthContext";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TopNav } from "./TopNav";
@@ -6,6 +6,7 @@ import { LogOut } from "lucide-react";
 import { Button } from "./ui/button";
 import { LiveLogisticsBackdrop } from "./LiveLogisticsBackdrop";
 import { LogisticsHologram } from "./LogisticsHologram";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuth();
@@ -27,6 +28,12 @@ export const RoleProtectedRoute = ({ children, allowedRoles }: { children: React
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <SidebarProvider>
@@ -55,11 +62,18 @@ export default function AppLayout() {
               <div className="h-8 w-px bg-white/10 hidden md:block"></div>
 
               <div className="flex items-center gap-4">
+                <Avatar className="h-9 w-9 border border-white/15">
+                  {user?.avatarUrl && <AvatarImage src={user.avatarUrl} alt={user.name || "User avatar"} />}
+                  <AvatarFallback className="bg-primary/15 font-bold text-primary">
+                    {(user?.name || user?.email || "U").charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
                 <div className="hidden sm:block text-right">
                   <p className="text-sm font-bold text-white uppercase tracking-wider">{user?.name}</p>
+                  <p className="max-w-48 truncate text-xs text-white/45">{user?.email}</p>
                   <p className="text-xs text-primary tracking-widest uppercase">{user?.role}</p>
                 </div>
-                <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="text-white hover:text-destructive hover:bg-destructive/10 transition-colors cursor-none">
+                <Button variant="ghost" size="icon" onClick={handleLogout} title="Logout" className="text-white hover:text-destructive hover:bg-destructive/10 transition-colors cursor-none">
                   <LogOut className="h-5 w-5" />
                 </Button>
               </div>

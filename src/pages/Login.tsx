@@ -1,26 +1,48 @@
-import { useState } from "react";
-import { useAuth, Role } from "@/context/AuthContext";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { LiveLogisticsBackdrop } from "@/components/LiveLogisticsBackdrop";
 import { LogisticsHologram } from "@/components/LogisticsHologram";
 
+function GoogleIcon() {
+    return (
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
+            <path fill="#4285F4" d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.8 3-4.3 3-7.3Z" />
+            <path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4L15.4 17c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22Z" />
+            <path fill="#FBBC05" d="M6.4 13.9A6 6 0 0 1 6.1 12c0-.7.1-1.3.3-1.9V7.5H3.1A10 10 0 0 0 2 12c0 1.6.4 3.1 1.1 4.5l3.3-2.6Z" />
+            <path fill="#EA4335" d="M12 6c1.5 0 2.8.5 3.8 1.5l2.9-2.8A9.7 9.7 0 0 0 12 2a10 10 0 0 0-8.9 5.5l3.3 2.6C7.2 7.8 9.4 6 12 6Z" />
+        </svg>
+    );
+}
+
 export default function Login() {
     const [isLogin, setIsLogin] = useState(true);
-    const [role, setRole] = useState<Role>("Manager");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
-    const { login, signup } = useAuth();
+    const { user, login, loginWithGoogle, signup } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const { toast } = useToast();
+
+    useEffect(() => {
+        if (searchParams.get("oauth") !== "failed") return;
+
+        toast({
+            title: "Google Login Failed",
+            description: "Google sign-in could not be completed. Please try again.",
+            variant: "destructive",
+        });
+        navigate("/login", { replace: true });
+    }, [navigate, searchParams, toast]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -37,15 +59,15 @@ export default function Login() {
                 const result = await login(email, password);
                 if (result.success) {
                     toast({ title: "Login Successful", description: "Welcome back to Transportation Helper.", variant: "default" });
-                    navigate("/");
+                    navigate("/dashboard");
                 } else {
                     toast({ title: "Login Failed", description: result.error, variant: "destructive" });
                 }
             } else {
-                const result = await signup(email, password, name, role);
+                const result = await signup(email, password, name);
                 if (result.success) {
                     toast({ title: "Account Created", description: "Your account has been created successfully.", variant: "default" });
-                    navigate("/");
+                    navigate("/dashboard");
                 } else {
                     const needsConfirmation = result.error?.startsWith("Account created.");
                     toast({ title: needsConfirmation ? "Confirm Email" : "Signup Failed", description: result.error, variant: needsConfirmation ? "default" : "destructive" });
@@ -55,6 +77,24 @@ export default function Login() {
             setIsSubmitting(false);
         }
     };
+
+    const handleGoogleLogin = async () => {
+        setIsGoogleLoading(true);
+        const result = await loginWithGoogle();
+
+        if (!result.success) {
+            toast({
+                title: "Google Login Failed",
+                description: result.error,
+                variant: "destructive",
+            });
+            setIsGoogleLoading(false);
+        }
+    };
+
+    if (user) {
+        return <Navigate to="/dashboard" replace />;
+    }
 
     return (
         <div className="min-h-[100dvh] flex items-center justify-center bg-black p-4 relative overflow-hidden selection:bg-primary/20 w-full">
@@ -90,20 +130,6 @@ export default function Login() {
                                     <Label htmlFor="name" className="text-white/60 uppercase tracking-widest text-[10px] font-bold">Full Name</Label>
                                     <Input id="name" type="text" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} className="bg-black/50 border-white/10 text-white focus-visible:ring-primary focus-visible:border-primary transition-all" />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="role" className="text-white/60 uppercase tracking-widest text-[10px] font-bold">Role Designation</Label>
-                                    <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-                                        <SelectTrigger className="bg-black/50 border-white/10 text-white focus:ring-primary focus:border-primary">
-                                            <SelectValue placeholder="Select a role" />
-                                        </SelectTrigger>
-                                        <SelectContent className="bg-black/90 border-white/10 text-white backdrop-blur-xl">
-                                            <SelectItem value="Manager" className="hover:bg-primary hover:text-black">Manager</SelectItem>
-                                            <SelectItem value="Dispatcher" className="hover:bg-primary hover:text-black">Dispatcher</SelectItem>
-                                            <SelectItem value="Safety Officer" className="hover:bg-primary hover:text-black">Safety Officer</SelectItem>
-                                            <SelectItem value="Finance" className="hover:bg-primary hover:text-black">Finance</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
                             </div>
                         )}
                         <div className="space-y-2">
@@ -118,6 +144,23 @@ export default function Login() {
                             {isSubmitting ? "Processing..." : isLogin ? "Acknowledge" : "Register Identity"}
                         </Button>
                     </form>
+
+                    <div className="my-6 flex items-center gap-4" aria-hidden="true">
+                        <div className="h-px flex-1 bg-white/10" />
+                        <span className="text-xs font-bold uppercase text-white/40">OR</span>
+                        <div className="h-px flex-1 bg-white/10" />
+                    </div>
+
+                    <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleGoogleLogin}
+                        disabled={isGoogleLoading || isSubmitting}
+                        className="h-12 w-full gap-3 border-white/15 bg-white/5 font-bold text-white hover:bg-white/10 hover:text-white disabled:opacity-60"
+                    >
+                        <GoogleIcon />
+                        {isGoogleLoading ? "Connecting to Google..." : "Continue with Google"}
+                    </Button>
                 </CardContent>
                 <CardFooter className="flex justify-center pt-6 border-t border-white/5 mt-4">
                     <Button variant="link" className="text-[10px] sm:text-xs uppercase tracking-[0.2em] text-white/40 hover:text-primary transition-colors" onClick={() => setIsLogin(!isLogin)}>
