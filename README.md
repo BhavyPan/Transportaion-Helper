@@ -91,7 +91,8 @@ In **Authentication > URL Configuration**, configure:
 ```text
 Site URL: http://localhost:8080
 Redirect URL: http://localhost:8080/auth/callback
-Production redirect: https://MY-DOMAIN.com/auth/callback
+Production Site URL: https://transportaion-helper.vercel.app
+Production redirect: https://transportaion-helper.vercel.app/auth/callback
 ```
 
 ### Google Cloud OAuth client
@@ -100,7 +101,7 @@ Create a **Web application** OAuth client and configure:
 
 ```text
 Authorized JavaScript origin: http://localhost:8080
-Production origin: https://MY-DOMAIN.com
+Production origin: https://transportaion-helper.vercel.app
 Authorized redirect URI: https://SUPABASE_PROJECT_REF.supabase.co/auth/v1/callback
 ```
 
