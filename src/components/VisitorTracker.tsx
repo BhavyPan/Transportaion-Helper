@@ -1,5 +1,8 @@
 import { useEffect } from "react";
-import { recordDailyVisit } from "@/lib/visitorAnalytics";
+import {
+  getAnonymousVisitorId,
+  recordVisitOncePerSession,
+} from "@/lib/visitorAnalytics";
 import { useAuth } from "@/context/AuthContext";
 
 export default function VisitorTracker() {
@@ -7,10 +10,12 @@ export default function VisitorTracker() {
   const userId = user?.id;
 
   useEffect(() => {
-    if (!userId) return;
+    const visitorId = userId
+      ? `user:${userId}`
+      : `anonymous:${getAnonymousVisitorId()}`;
 
-    recordDailyVisit(userId).catch((error) => {
-      console.error("Failed to record daily visitor", error);
+    recordVisitOncePerSession(visitorId).catch((error) => {
+      console.error("Visitor analytics error:", error);
     });
   }, [userId]);
 

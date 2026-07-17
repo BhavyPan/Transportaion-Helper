@@ -32,19 +32,30 @@ This project is built with:
 
 ## Daily visitor analytics
 
-The site records each authenticated user ID once per day through the Dockerized
-Daily Unique Visitor Counter. Different accounts count separately, while repeat
-visits by the same account do not increase the daily unique count. Start the counter from
-the repository's `daily-visitor-counter` directory:
+The site records each browser or authenticated account once per day through the
+Dockerized Daily Unique Visitor Counter. Anonymous visitors keep a UUID in
+`localStorage`, so normal refresh and force-refresh reuse the same identity.
+After Supabase finishes loading, authenticated visitors use the current Supabase
+user ID. Start the counter from the repository's `daily-visitor-counter` directory:
 
 ```sh
 docker compose up -d --build
 ```
 
+Before the first start, copy `daily-visitor-counter/.env.example` to
+`daily-visitor-counter/.env`. Replace `VISITOR_HASH_SECRET` with a stable random
+value of at least 32 characters.
+
 During local development, Vite proxies `/visitor-api` to
-`http://localhost:3000`. The Analytics page shows today's HyperLogLog estimate,
-exact Set count, difference, and error percentage. Supabase remains responsible
-for authentication and fleet records; Redis is used only for visitor analytics.
+`http://localhost:3000`. The dashboard and Analytics page show today's exact total,
+logged-in unique visitors, returning logged-in visitors, HyperLogLog estimate,
+difference, and error percentage. A returning logged-in visitor has at least two
+separate browser sessions on the same day; refreshes in one session do not count as
+another visit. Supabase remains responsible for authentication and fleet records;
+Redis is used only for visitor analytics.
+The API stores HMAC hashes instead of raw browser or Supabase IDs. Clearing browser
+storage, using incognito mode, another browser, or another device creates a new
+anonymous identity. Daily Redis keys do not expire automatically.
 
 ## Authentication setup
 
@@ -58,7 +69,7 @@ Create `.env.local` from `.env.example` and provide your project values:
 ```env
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY
-VITE_VISITOR_API_URL=
+VITE_ANALYTICS_API_URL=http://localhost:3000
 ```
 
 Do not use a Supabase service-role key in this frontend file. Keep real values out
@@ -118,9 +129,10 @@ To enable analytics on the live website:
 
 1. In Render, create a new Blueprint and connect this GitHub repository.
 2. Deploy the `daily-visitor-counter-api` and `daily-visitor-counter-redis` services.
-3. Copy the API's generated `https://...onrender.com` URL.
-4. In Vercel, set `VITE_VISITOR_API_URL` to that URL for Production.
-5. Redeploy the Vercel project so Vite includes the environment variable in its build.
+3. The Blueprint generates `VISITOR_HASH_SECRET` automatically.
+4. Copy the API's generated `https://...onrender.com` URL.
+5. In Vercel, set `VITE_ANALYTICS_API_URL` to that URL for Production.
+6. Redeploy the Vercel project so Vite includes the environment variable in its build.
 
 The Blueprint uses free Render services to avoid automatically selecting a paid
 plan. Render's free Key Value service does not provide disk persistence. Select a

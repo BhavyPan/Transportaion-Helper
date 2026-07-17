@@ -2,11 +2,17 @@ require('dotenv').config();
 
 const express = require('express');
 const { redisClient, connectRedis } = require('./redis');
+const {
+  VisitorValidationError,
+  hashVisitorId,
+  normalizeVisitorId,
+  validateIdentityConfiguration,
+} = require('./identity');
 
 const app = express();
 
 const allowedOrigins = new Set(
-  (process.env.ALLOWED_ORIGINS || '')
+  getRequiredEnvironmentVariable('FRONTEND_ORIGIN')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
@@ -14,13 +20,9 @@ const allowedOrigins = new Set(
 
 const port = parsePositiveInteger(process.env.PORT, 'PORT');
 const appTimezone = getRequiredEnvironmentVariable('APP_TIMEZONE');
-const retentionDays = parsePositiveInteger(
-  process.env.RETENTION_DAYS,
-  'RETENTION_DAYS',
-);
-const retentionSeconds = retentionDays * 24 * 60 * 60;
 
 validateTimezone(appTimezone);
+validateIdentityConfiguration();
 
 app.use((request, response, next) => {
   const origin = request.get('origin');
@@ -45,7 +47,7 @@ app.use((request, response, next) => {
   return next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '16kb' }));
 
 class RedisUnavailableError extends Error {
   constructor(cause) {
@@ -139,6 +141,8 @@ function getDailyKeys(date) {
   return {
     hllKey: `visitors:hll:${date}`,
     setKey: `visitors:set:${date}`,
+    loggedInSetKey: `visitors:logged-in:set:${date}`,
+    loggedInVisitsKey: `visitors:logged-in:visits:${date}`,
   };
 }
 
@@ -155,23 +159,36 @@ async function runRedisOperation(operation) {
 }
 
 async function getStatistics(date) {
-  const { hllKey, setKey } = getDailyKeys(date);
-  const [estimatedUniqueVisitors, exactUniqueVisitors] =
-    await runRedisOperation(() =>
-      redisClient.multi().pfCount(hllKey).sCard(setKey).exec(),
-    );
-
-  const difference = Math.abs(
-    estimatedUniqueVisitors - exactUniqueVisitors,
+  const { hllKey, setKey, loggedInSetKey, loggedInVisitsKey } =
+    getDailyKeys(date);
+  const [
+    estimatedUniqueVisitors,
+    exactUniqueVisitors,
+    loggedInUniqueVisitors,
+    returningLoggedInVisitors,
+  ] = await runRedisOperation(() =>
+    redisClient
+      .multi()
+      .pfCount(hllKey)
+      .sCard(setKey)
+      .sCard(loggedInSetKey)
+      .zCount(loggedInVisitsKey, 2, '+inf')
+      .exec(),
   );
+
+  const difference = exactUniqueVisitors - estimatedUniqueVisitors;
   const errorPercentage =
     exactUniqueVisitors === 0
       ? 0
-      : Number(((difference / exactUniqueVisitors) * 100).toFixed(2));
+      : Number(
+          ((Math.abs(difference) / exactUniqueVisitors) * 100).toFixed(2),
+        );
 
   return {
-    success: true,
     date,
+    totalUniqueVisitors: exactUniqueVisitors,
+    loggedInUniqueVisitors,
+    returningLoggedInVisitors,
     estimatedUniqueVisitors,
     exactUniqueVisitors,
     difference,
@@ -207,46 +224,46 @@ app.get('/health', async (request, response) => {
   }
 });
 
-app.post('/api/visits', async (request, response, next) => {
+app.post('/api/analytics/visit', async (request, response, next) => {
   try {
-    const { visitorId } = request.body || {};
+    const visitorId = normalizeVisitorId(request.body?.visitorId);
+    const visitorHash = hashVisitorId(visitorId);
+    const date = getCurrentDate(appTimezone);
+    const { hllKey, setKey, loggedInSetKey, loggedInVisitsKey } =
+      getDailyKeys(date);
+    const isLoggedInVisitor = visitorId.startsWith('user:');
 
-    if (
-      typeof visitorId !== 'string' ||
-      visitorId.trim().length === 0 ||
-      visitorId.trim().length > 255
-    ) {
-      return response.status(400).json({
-        success: false,
-        error: 'A valid visitorId is required',
-      });
+    const transaction = redisClient
+      .multi()
+      .pfAdd(hllKey, visitorHash)
+      .sAdd(setKey, visitorHash);
+
+    if (isLoggedInVisitor) {
+      transaction
+        .sAdd(loggedInSetKey, visitorHash)
+        .zIncrBy(loggedInVisitsKey, 1, visitorHash);
     }
 
-    const trimmedVisitorId = visitorId.trim();
-    const date = getCurrentDate(appTimezone);
-    const { hllKey, setKey } = getDailyKeys(date);
-
-    await runRedisOperation(() =>
-      redisClient
-        .multi()
-        .pfAdd(hllKey, trimmedVisitorId)
-        .sAdd(setKey, trimmedVisitorId)
-        .expire(hllKey, retentionSeconds, 'NX')
-        .expire(setKey, retentionSeconds, 'NX')
-        .exec(),
+    const [, exactVisitorAdded] = await runRedisOperation(() =>
+      transaction.exec(),
     );
 
-    return response.status(201).json({
+    const newExactVisitor = exactVisitorAdded === 1;
+
+    return response.status(newExactVisitor ? 201 : 200).json({
       success: true,
-      message: 'Visit recorded',
+      message: newExactVisitor
+        ? 'New unique visitor recorded'
+        : 'Visitor was already counted today',
       date,
+      newExactVisitor,
     });
   } catch (error) {
     return next(error);
   }
 });
 
-app.get('/api/stats/today', async (request, response, next) => {
+app.get('/api/analytics/daily', async (request, response, next) => {
   try {
     const date = getCurrentDate(appTimezone);
     return response.json(await getStatistics(date));
@@ -255,14 +272,14 @@ app.get('/api/stats/today', async (request, response, next) => {
   }
 });
 
-app.get('/api/stats/:date', async (request, response, next) => {
+app.get('/api/analytics/daily/:date', async (request, response, next) => {
   try {
     const { date } = request.params;
 
     if (!isValidDate(date)) {
       return response.status(400).json({
         success: false,
-        error: 'Invalid date format. Use YYYY-MM-DD',
+        message: 'Invalid date format. Use YYYY-MM-DD',
       });
     }
 
@@ -275,17 +292,24 @@ app.get('/api/stats/:date', async (request, response, next) => {
 app.use((request, response) => {
   response.status(404).json({
     success: false,
-    error: 'Route not found',
+    message: 'Route not found',
   });
 });
 
 app.use((error, request, response, next) => {
+  if (error instanceof VisitorValidationError) {
+    return response.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+
   if (error instanceof RedisUnavailableError) {
     console.error('Redis request failed:', error.cause || error);
 
     return response.status(503).json({
       success: false,
-      error: 'Redis service is unavailable',
+      message: 'Redis service is unavailable',
     });
   }
 
@@ -293,7 +317,7 @@ app.use((error, request, response, next) => {
 
   return response.status(500).json({
     success: false,
-    error: 'Internal server error',
+    message: 'Internal server error',
   });
 });
 
@@ -303,7 +327,7 @@ let isShuttingDown = false;
 async function startServer() {
   try {
     await connectRedis();
-    httpServer = app.listen(port, () => {
+    httpServer = app.listen(port, '0.0.0.0', () => {
       console.log(`Server is running on port ${port}`);
     });
   } catch (error) {

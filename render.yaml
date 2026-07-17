@@ -19,10 +19,10 @@ services:
           property: connectionString
       - key: APP_TIMEZONE
         value: Asia/Kolkata
-      - key: RETENTION_DAYS
-        value: 30
-      - key: ALLOWED_ORIGINS
-        value: https://transportaion-helper.vercel.app
+      - key: VISITOR_HASH_SECRET
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        value: http://localhost:5173,http://localhost:3000,https://transportaion-helper.vercel.app
 
   - type: keyvalue
     name: daily-visitor-counter-redis

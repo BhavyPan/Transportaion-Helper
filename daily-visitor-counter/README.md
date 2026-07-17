@@ -1,158 +1,76 @@
 # Daily Unique Visitor Counter
 
-A small Express API that records and reports daily unique visitors in Redis. It
-stores each visitor in two Redis data structures so an estimated count can be
-compared with an exact count.
-
-## How counting works
-
-- **Redis HyperLogLog** uses very little memory and returns an approximate unique
-  count. It is useful when a small estimation error is acceptable.
-- **Redis Set** stores every unique visitor ID and returns an exact count. It uses
-  more memory as the number of visitors grows.
-
-A trimmed visitor ID is added to both structures for the current date. Adding the
-same ID again on that date does not increase the unique count. Each date has new
-keys, so the same visitor can be counted again on another day. Keys expire after
-the configured retention period.
+This backend counts unique daily website visitors with Redis. HyperLogLog provides
+the memory-efficient estimate, while a Set provides the exact comparison count.
+Only HMAC SHA-256 visitor hashes are stored in Redis.
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js
 - npm
-- Redis 7 or newer running locally or at an accessible URL
+- Docker Desktop, or Docker Engine with Docker Compose
 
-Redis 7 is required because the API uses the `NX` option with `EXPIRE` to set a
-key's expiration only when it does not already have one.
+## Environment setup
 
-## Local setup
-
-For development outside Docker, create a `.env` file with a localhost Redis URL:
-
-```env
-PORT=3000
-REDIS_URL=redis://localhost:6379
-APP_TIMEZONE=Asia/Kolkata
-RETENTION_DAYS=30
-```
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Start the API:
-
-```bash
-npm start
-```
-
-For development with automatic restarts, run `npm run dev`.
-
-## Docker requirements
-
-Install either Docker Desktop, or Docker Engine with the Docker Compose plugin.
-Docker Compose starts both the API and Redis, so Redis does not need to be started
-separately.
-
-The values in `.env.example` are configured for Docker. Compose also supplies
-these values by default:
+Copy `.env.example` to `.env` and replace the hash secret with a stable random
+value containing at least 32 characters:
 
 ```env
 PORT=3000
 REDIS_URL=redis://redis:6379
 APP_TIMEZONE=Asia/Kolkata
-RETENTION_DAYS=30
+VISITOR_HASH_SECRET=replace-with-a-long-random-secret
+FRONTEND_ORIGIN=http://localhost:5173,http://localhost:3000,https://transportaion-helper.vercel.app
 ```
 
-### Start the application
+`FRONTEND_ORIGIN` is a comma-separated allowlist. Requests from other browser
+origins do not receive CORS permission.
 
-```bash
+## Start with Docker
+
+```sh
 docker compose up --build
 ```
 
-The API is available at:
+Run in the background:
 
-```text
-http://localhost:3000
-```
-
-### Run in the background
-
-```bash
+```sh
 docker compose up -d --build
 ```
 
-### View logs
+The API is available at `http://localhost:3000`. Redis remains private on the
+Docker network and the application connects to it through `redis://redis:6379`.
 
-```bash
+View status and logs:
+
+```sh
+docker compose ps
 docker compose logs -f
 ```
 
-### Check running containers
+Stop the containers without deleting analytics:
 
-```bash
-docker compose ps
-```
-
-### Stop containers
-
-```bash
+```sh
 docker compose down
 ```
 
-Normal container stops preserve Redis analytics in the named Docker volume. To
-stop the containers and delete that stored data, run:
+Delete the containers and the Redis volume:
 
-```bash
+```sh
 docker compose down -v
 ```
 
-**Warning:** The `-v` option deletes the Redis Docker volume and all analytics
-stored in it.
-
-## Docker architecture
-
-```text
-Client
-  |
-  v
-Node.js / Express container
-  |
-  v
-Redis container
-  |-- HyperLogLog
-  `-- Set
-```
-
-The containers communicate over Docker Compose's internal network. Redis is not
-published to the host; the API connects to it using the `redis` service name and
-the URL `redis://redis:6379`.
+**Warning:** `-v` permanently deletes all stored visitor analytics.
 
 ## API endpoints
 
-### API information
-
-```http
-GET /
-```
-
-Response:
-
-```json
-{
-  "message": "Daily Unique Visitor Counter API"
-}
-```
-
-### Health check
+### Health
 
 ```http
 GET /health
 ```
 
-When Redis is reachable, the response is `200 OK`:
+Healthy response:
 
 ```json
 {
@@ -161,129 +79,112 @@ When Redis is reachable, the response is `200 OK`:
 }
 ```
 
-When Redis is unavailable, the response is `503 Service Unavailable`:
-
-```json
-{
-  "status": "error",
-  "redis": "disconnected"
-}
-```
-
-Redis-dependent API endpoints also return `503 Service Unavailable` while Redis
-cannot serve requests:
-
-```json
-{
-  "success": false,
-  "error": "Redis service is unavailable"
-}
-```
-
 ### Record a visitor
 
 ```http
-POST /api/visits
+POST /api/analytics/visit
 Content-Type: application/json
 ```
 
-Request:
+Anonymous request:
 
 ```json
 {
-  "visitorId": "user123"
+  "visitorId": "anonymous:550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-Successful response (`201 Created`):
+Authenticated request:
+
+```json
+{
+  "visitorId": "user:550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+New visitor response:
 
 ```json
 {
   "success": true,
-  "message": "Visit recorded",
-  "date": "2026-07-16"
+  "date": "2026-07-17",
+  "newExactVisitor": true,
+  "message": "New unique visitor recorded"
 }
 ```
 
-Invalid visitor IDs receive `400 Bad Request`:
+Repeated visitor response:
 
 ```json
 {
-  "success": false,
-  "error": "A valid visitorId is required"
+  "success": true,
+  "date": "2026-07-17",
+  "newExactVisitor": false,
+  "message": "Visitor was already counted today"
 }
 ```
 
-### Get today's statistics
+`visitorId` must be a non-empty string containing at most 200 characters.
+
+### Today's statistics
 
 ```http
-GET /api/stats/today
+GET /api/analytics/daily
 ```
 
-Response:
-
-```json
-{
-  "success": true,
-  "date": "2026-07-16",
-  "estimatedUniqueVisitors": 998,
-  "exactUniqueVisitors": 1000,
-  "difference": 2,
-  "errorPercentage": 0.2
-}
-```
-
-### Get statistics for a date
+### Statistics by date
 
 ```http
-GET /api/stats/2026-07-15
+GET /api/analytics/daily/2026-07-17
 ```
 
-The date must be a real calendar date in `YYYY-MM-DD` format. Missing Redis keys
-produce a successful response with zero counts.
+Dates must be real calendar dates in `YYYY-MM-DD` format.
 
-Response:
+Statistics response:
 
 ```json
 {
-  "success": true,
-  "date": "2026-07-15",
-  "estimatedUniqueVisitors": 5010,
-  "exactUniqueVisitors": 5000,
-  "difference": 10,
-  "errorPercentage": 0.2
+  "date": "2026-07-17",
+  "totalUniqueVisitors": 101,
+  "loggedInUniqueVisitors": 60,
+  "returningLoggedInVisitors": 15,
+  "estimatedUniqueVisitors": 100,
+  "exactUniqueVisitors": 101,
+  "difference": 1,
+  "errorPercentage": 0.99
 }
 ```
 
-An invalid date receives `400 Bad Request`:
+`difference` is the exact count minus the estimate. Error percentage uses the
+absolute difference and returns zero when the exact count is zero.
 
-```json
-{
-  "success": false,
-  "error": "Invalid date format. Use YYYY-MM-DD"
-}
-```
+- `totalUniqueVisitors` counts all logged-in and anonymous visitors once per day.
+- `loggedInUniqueVisitors` counts authenticated visitors once per day.
+- `returningLoggedInVisitors` counts logged-in visitors with at least two separate
+  recorded browser sessions that day.
+- `estimatedUniqueVisitors` is the HyperLogLog estimate across all visitors.
 
-## Redis keys
+## Redis storage
 
-Every date uses two keys:
+Each date uses two keys:
 
 ```text
 visitors:hll:YYYY-MM-DD
 visitors:set:YYYY-MM-DD
+visitors:logged-in:set:YYYY-MM-DD
+visitors:logged-in:visits:YYYY-MM-DD
 ```
 
-For example:
+The backend uses `PFADD` and `PFCOUNT` for the estimate, Sets for exact unique
+counts, and a sorted set for the number of logged-in sessions. Daily keys do not
+receive an expiration and remain available until they are manually deleted. The
+`redis-data` Docker volume preserves data across ordinary container restarts.
 
-```text
-visitors:hll:2026-07-16
-visitors:set:2026-07-16
+## Local development without Docker
+
+Run Redis locally, set `REDIS_URL=redis://localhost:6379`, then run:
+
+```sh
+npm install
+npm start
 ```
-
-## Statistics fields
-
-- `estimatedUniqueVisitors`: approximate count returned by HyperLogLog `PFCOUNT`.
-- `exactUniqueVisitors`: exact count returned by Set `SCARD`.
-- `difference`: absolute difference between the estimated and exact counts.
-- `errorPercentage`: difference divided by the exact count, multiplied by 100 and
-  rounded to two decimal places. It is `0` when the exact count is zero.

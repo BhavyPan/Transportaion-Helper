@@ -24,6 +24,7 @@ import { Link } from "react-router-dom";
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { EmptySpaceHologram } from "@/components/EmptySpaceHologram";
+import DailyVisitorAnalytics from "@/components/DailyVisitorAnalytics";
 
 export default function Dashboard() {
   const { vehicles, trips, drivers } = useFleet();
@@ -394,6 +395,8 @@ export default function Dashboard() {
             </div>
           </motion.div>
         </div>
+
+        <DailyVisitorAnalytics className="landing-slide" />
 
         {/* Analytics Preview */}
         <motion.div
