@@ -7,7 +7,6 @@ export type Role = "User" | "Manager" | "Dispatcher" | "Safety Officer" | "Finan
 export interface User {
     id: string;
     email: string;
-    password?: string;
     name: string;
     role: Role;
     avatarUrl?: string;

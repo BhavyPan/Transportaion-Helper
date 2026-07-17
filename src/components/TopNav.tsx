@@ -9,7 +9,7 @@ import {
   BarChart3,
   type LucideIcon,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useAuth, Role } from "@/context/AuthContext";
 
 type NavItem = {

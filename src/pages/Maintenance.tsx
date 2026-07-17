@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { MaintenanceLog, Driver, VehicleStatus, VehicleType, DriverStatus } from "@/data/mockData";
+import type { MaintenanceLog, Driver, VehicleStatus, DriverStatus } from "@/data/mockData";
 import { useToast } from "@/components/ui/use-toast";
 
 const statusIcon = {

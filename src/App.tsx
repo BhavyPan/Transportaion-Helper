@@ -1,6 +1,4 @@
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import AppLayout, { ProtectedRoute, RoleProtectedRoute } from "@/components/AppLayout";
@@ -101,13 +99,10 @@ const App = () => (
     <AuthProvider>
       <VisitorTracker />
       <FleetProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AnimatedRoutes />
-          </BrowserRouter>
-        </TooltipProvider>
+        <Toaster />
+        <BrowserRouter>
+          <AnimatedRoutes />
+        </BrowserRouter>
       </FleetProvider>
     </AuthProvider>
   </QueryClientProvider>

@@ -68,7 +68,6 @@ export default function Analytics() {
       };
     });
 
-  const fuelByVehicle = vehicleStats.filter(d => d.fuelCost > 0).map(d => ({ name: d.name, fuel: d.fuelCost }));
   const maintByVehicle = vehicleStats.filter(d => d.maintCost > 0).map(d => ({ name: d.name, cost: d.maintCost }));
 
   // Trip completion
