@@ -1,143 +1,387 @@
-# Transportation Helper
+# Transportation Helper: Daily Unique Visitor Counter
 
-Transportation Helper is a Vite, React, TypeScript, shadcn-ui, and Tailwind CSS application for fleet management workflows.
+Transportation Helper is a fleet-management website with a Dockerized visitor
+analytics system. The main competition feature is the **Daily Unique Visitor
+Counter**, which uses Redis HyperLogLog for an estimated count and Redis Sets for
+exact unique counts.
 
-## Getting started
+The counter supports anonymous visitors, Supabase-authenticated visitors, daily
+statistics, lifetime statistics, returning-login analysis, Redis persistence, and
+Docker deployment.
 
-Install dependencies and start the development server:
+## Live submission
 
-```sh
-npm install
-npm run dev
-```
+- **Live website:** https://transportaion-helper.vercel.app
+- **Visitor analytics page:** https://transportaion-helper.vercel.app/analytics
+- **GitHub repository:** https://github.com/BhavyPan/Transportaion-Helper
+- **Analytics API health:** https://daily-visitor-counter-api.onrender.com/health
+- **Today's analytics API:** https://daily-visitor-counter-api.onrender.com/api/analytics/daily
 
-## Scripts
+## Evaluator walkthrough
 
-- `npm run dev` starts the local Vite development server.
-- `npm run build` creates a production build.
-- `npm run build:dev` creates a development-mode build.
-- `npm run lint` runs ESLint.
-- `npm run test` runs the Vitest test suite.
-- `npm run preview` serves the production build locally.
+Follow these steps to find and demonstrate the visitor counter.
 
-## Technology
+### 1. Create or access an account
 
-This project is built with:
+1. Open the [live website](https://transportaion-helper.vercel.app).
+2. If you are a new user, select **Request access**, enter your details, and
+   complete signup.
+3. If you already have an account, sign in using email/password or select
+   **Continue with Google**.
+4. After authentication, the website opens the dashboard.
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### 2. Use an account that can view Analytics
 
-## Daily visitor analytics
+The Analytics page is protected and can be opened only by accounts whose
+Supabase profile role is **Manager** or **Finance**.
 
-The site records each browser or authenticated account once per day through the
-Dockerized Daily Unique Visitor Counter. Anonymous visitors keep a UUID in
-`localStorage`, so normal refresh and force-refresh reuse the same identity.
-After Supabase finishes loading, authenticated visitors use the current Supabase
-user ID. Start the counter from the repository's `daily-visitor-counter` directory:
+New public signups safely receive the **User** role and cannot promote themselves.
+For evaluation, use a preconfigured Manager or Finance account supplied by the
+project owner. Alternatively, the project owner can assign the role through the
+Supabase Dashboard or SQL Editor, then the evaluator should sign out and sign in
+again.
 
-```sh
-docker compose up -d --build
-```
+Do not place evaluator passwords or privileged Supabase keys in this repository.
 
-Before the first start, copy `daily-visitor-counter/.env.example` to
-`daily-visitor-counter/.env`. Replace `VISITOR_HASH_SECRET` with a stable random
-value of at least 32 characters.
+### 3. Open the visitor analytics
 
-During local development, Vite proxies `/visitor-api` to
-`http://localhost:3000`. The dashboard and Analytics page show the exact unique
-total across all stored dates, today's exact total, logged-in unique visitors,
-returning logged-in visitors for today and all time, HyperLogLog estimate,
-difference, and error percentage. A returning logged-in visitor has completed at
-least two successful sign-ins. Refreshes and restored Supabase sessions do not
-count as another login. Supabase remains responsible for authentication and fleet
-records; Redis is used only for visitor analytics.
-The API stores HMAC hashes instead of raw browser or Supabase IDs. Clearing browser
-storage, using incognito mode, another browser, or another device creates a new
-anonymous identity. Daily Redis keys do not expire automatically.
+1. Select **Analytics** in the top navigation.
+2. You can also open
+   [https://transportaion-helper.vercel.app/analytics](https://transportaion-helper.vercel.app/analytics)
+   directly after signing in.
+3. On the Fleet Analytics page, find the section labelled **Daily Visitor
+   Counter** with the heading **Website Audience**.
+4. The visitor section appears below the four fleet KPI cards and before the
+   fleet charts.
+5. Use the refresh icon in the section header to request the latest Redis
+   statistics.
 
-## Authentication setup
+### 4. Read the counter values
 
-This project is a Vite React application, so it uses the existing Supabase browser
-client and a React Router callback at `/auth/callback`. Sessions are created and
-refreshed by Supabase Auth; the application does not store custom login flags or
-passwords.
+| Value | Meaning |
+| --- | --- |
+| Total Visitors Till Now | Exact unique browser/account identifiers across every stored date |
+| Total Visitors Today | Exact unique browser/account identifiers for today's Kolkata date |
+| Logged-In Visitors Today | Unique Supabase accounts that visited today |
+| Returning Logged-In Today | Accounts that completed at least two successful sign-ins today |
+| Returning Logged-In Till Now | Accounts that completed at least two successful sign-ins across all dates |
+| Estimated Visitors | Today's Redis HyperLogLog estimate |
+| Difference | Exact daily count minus estimated daily count |
+| Error Percentage | Absolute difference divided by the exact count, multiplied by 100 |
 
-Create `.env.local` from `.env.example` and provide your project values:
+For small visitor counts, the estimated and exact values will often be identical.
+HyperLogLog becomes valuable at large scale because it estimates unique visitors
+with much less memory than storing every member in a Set.
 
-```env
+## Suggested competition demonstration
+
+Use this sequence to demonstrate that the system is counting correctly:
+
+1. Open the live site in a normal browser. The browser is counted once today.
+2. Refresh or force-refresh the page. The exact daily total does not increase
+   because the same visitor identifier is reused.
+3. Sign in with Account A. It appears in **Logged-In Visitors Today**.
+4. Sign out and sign in with Account A again on the same day. Account A now
+   qualifies for **Returning Logged-In Today**.
+5. Sign in once with Account B. Logged-in visitors increase, but Account B is not
+   returning today until it completes a second sign-in.
+6. Open the website on another device, browser, or incognito session. It receives
+   another anonymous UUID and increases the exact unique count.
+7. On the next Kolkata calendar date, daily counters use new Redis keys and start
+   from zero. Lifetime counters retain the previous data.
+
+## How visitor identification works
+
+### Anonymous visitors
+
+An anonymous browser receives a UUID from:
+
+~~~js
+crypto.randomUUID()
+~~~
+
+It is stored in browser localStorage under:
+
+~~~text
+transportation_helper_visitor_id
+~~~
+
+The same UUID is reused after navigation, refresh, force-refresh, and browser
+restart. Clearing browser storage, using incognito mode, changing browser, or
+changing device creates another anonymous identity.
+
+Anonymous identifier format:
+
+~~~text
+anonymous:<browser-uuid>
+~~~
+
+### Logged-in visitors
+
+After Supabase authentication finishes, the verified Supabase user ID is used:
+
+~~~text
+user:<supabase-user-id>
+~~~
+
+Successful login events are recorded separately from ordinary page loads.
+Refreshes and automatically restored Supabase sessions do not increase login
+event counters.
+
+### Backend privacy protection
+
+The Express backend applies HMAC SHA-256 using **VISITOR_HASH_SECRET** before
+writing an identifier to Redis. Redis stores hashes instead of raw UUIDs,
+Supabase IDs, emails, names, or passwords.
+
+## Counting flow
+
+~~~text
+Visitor opens the Vercel website
+             |
+             v
+React creates or reads the visitor identifier
+             |
+             v
+POST /api/analytics/visit
+             |
+             v
+Render Node.js / Express backend
+             |
+             v
+HMAC SHA-256 visitor hash
+             |
+             v
+Redis HyperLogLog + Set + login sorted sets
+             |
+             v
+Analytics page requests and displays statistics
+~~~
+
+The analytics backend is intentionally independent from Supabase. Supabase stores
+authentication and fleet records; Redis stores visitor analytics.
+
+## Redis data model
+
+Every date uses separate keys:
+
+~~~text
+visitors:hll:YYYY-MM-DD
+visitors:set:YYYY-MM-DD
+visitors:logged-in:set:YYYY-MM-DD
+visitors:logged-in:visits:YYYY-MM-DD
+~~~
+
+Lifetime statistics use:
+
+~~~text
+visitors:set:all-time
+visitors:logged-in:visits:all-time
+~~~
+
+Redis commands used by the project:
+
+~~~text
+PFADD       Add a visitor hash to the daily HyperLogLog
+PFCOUNT     Read the estimated daily unique count
+SADD        Add a hash to an exact Set without duplicates
+SCARD       Read an exact Set count
+ZINCRBY     Record successful login occurrences
+ZCOUNT      Count accounts with two or more logins
+PING        Verify Redis connectivity
+~~~
+
+Visitor keys do not receive an application-level expiration. The Docker volume
+preserves local Redis data across ordinary container restarts. Production
+persistence also depends on the selected Render Key Value plan.
+
+## Analytics API
+
+### Record a visit
+
+~~~http
+POST /api/analytics/visit
+Content-Type: application/json
+~~~
+
+~~~json
+{
+  "visitorId": "anonymous:550e8400-e29b-41d4-a716-446655440000"
+}
+~~~
+
+After a successful login:
+
+~~~json
+{
+  "visitorId": "user:550e8400-e29b-41d4-a716-446655440000",
+  "loginEvent": true
+}
+~~~
+
+### Today's statistics
+
+~~~http
+GET /api/analytics/daily
+~~~
+
+### Statistics for a stored date
+
+~~~http
+GET /api/analytics/daily/2026-07-17
+~~~
+
+### Health check
+
+~~~http
+GET /health
+~~~
+
+The website continues operating if the analytics service is temporarily
+unavailable. The visitor section shows an error state without breaking fleet or
+authentication features.
+
+## Run locally
+
+### Required software
+
+- Node.js
+- npm
+- Docker Desktop, or Docker Engine with Docker Compose
+
+### 1. Configure the frontend
+
+Create **.env.local** from **.env.example**:
+
+~~~env
 VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
 VITE_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_OR_PUBLISHABLE_KEY
 VITE_ANALYTICS_API_URL=http://localhost:3000
-```
+~~~
 
-Do not use a Supabase service-role key in this frontend file. Keep real values out
-of `.env.example` and source control.
+Never use a Supabase service-role key in frontend environment variables.
 
-### Apply the security migrations
+### 2. Configure and start the counter
 
-For an existing Supabase project, run these files separately and in order in the
-Supabase SQL Editor:
+Create **daily-visitor-counter/.env** from
+**daily-visitor-counter/.env.example**. Replace **VISITOR_HASH_SECRET** with a
+stable random value containing at least 32 characters.
 
-1. `supabase/migrations/001_add_user_role.sql`
-2. `supabase/migrations/002_secure_oauth_profiles.sql`
+~~~sh
+cd daily-visitor-counter
+docker compose up -d --build
+~~~
 
-The first migration adds the safe `User` role. The second makes it the default,
-prevents users from changing their own role, and applies role-aware RLS policies.
-Existing Manager, Dispatcher, Safety Officer, and Finance roles are preserved.
-Assign elevated roles only through a trusted administrative process such as the
-Supabase SQL Editor; the public signup form cannot choose a role.
+Docker starts exactly two services:
 
-### Supabase Dashboard
+- **app**: Node.js and Express analytics API
+- **redis**: Redis with the persistent **redis-data** volume
 
-In **Authentication > Providers > Google**:
+Useful commands:
 
-1. Enable the Google provider.
-2. Enter the Google OAuth Client ID.
-3. Enter the Google OAuth Client Secret.
+~~~sh
+docker compose ps
+docker compose logs -f
+docker compose down
+~~~
 
-In **Authentication > URL Configuration**, configure:
+Do not run **docker compose down -v** unless you intentionally want to delete the
+local Redis analytics volume.
 
-```text
-Site URL: http://localhost:8080
-Redirect URL: http://localhost:8080/auth/callback
-Production Site URL: https://transportaion-helper.vercel.app
-Production redirect: https://transportaion-helper.vercel.app/auth/callback
-```
+### 3. Start the website
 
-### Google Cloud OAuth client
+From the repository root:
 
-Create a **Web application** OAuth client and configure:
+~~~sh
+npm install
+npm run dev
+~~~
 
-```text
+Open:
+
+~~~text
+http://localhost:8080
+~~~
+
+Vite proxies **/visitor-api** to **http://localhost:3000** during local
+development.
+
+## Authentication configuration
+
+Apply the existing Supabase migrations separately and in order:
+
+1. **supabase/migrations/001_add_user_role.sql**
+2. **supabase/migrations/002_secure_oauth_profiles.sql**
+
+The migrations preserve existing roles, default new accounts to **User**, prevent
+self-promotion, and apply role-aware Row Level Security.
+
+For Google authentication:
+
+1. Enable Google in **Supabase Authentication > Providers**.
+2. Add the Google OAuth Client ID and Client Secret in Supabase.
+3. Configure these Supabase application URLs:
+
+~~~text
+Local site: http://localhost:8080
+Local callback: http://localhost:8080/auth/callback
+Production site: https://transportaion-helper.vercel.app
+Production callback: https://transportaion-helper.vercel.app/auth/callback
+~~~
+
+4. Configure the Google Cloud Web application:
+
+~~~text
 Authorized JavaScript origin: http://localhost:8080
 Production origin: https://transportaion-helper.vercel.app
 Authorized redirect URI: https://SUPABASE_PROJECT_REF.supabase.co/auth/v1/callback
-```
+~~~
 
-The Google Cloud redirect URI is Supabase's provider callback URL. The application
-callback URL is `/auth/callback`. They are different URLs and both are required:
-Google returns to Supabase first, then Supabase returns to this application.
+The Google Cloud redirect URI is the Supabase provider callback. The application
+callback is **/auth/callback**; both URLs are required.
 
-## Deployment
+## Deployment architecture
 
-The Vite frontend is deployed on Vercel. The repository's `render.yaml` Blueprint
-defines a public Docker API and a private Redis-compatible Render Key Value service.
+~~~text
+Vercel
+  React / Vite website
+          |
+          v
+Render Web Service
+  Dockerized Node.js / Express API
+          |
+          v
+Render Key Value
+  Redis analytics data
+~~~
 
-To enable analytics on the live website:
+**render.yaml** defines the backend and Redis services. Vercel uses
+**VITE_ANALYTICS_API_URL** to call the public Render API. Redis is not exposed
+directly to website visitors.
 
-1. In Render, create a new Blueprint and connect this GitHub repository.
-2. Deploy the `daily-visitor-counter-api` and `daily-visitor-counter-redis` services.
-3. The Blueprint generates `VISITOR_HASH_SECRET` automatically.
-4. Copy the API's generated `https://...onrender.com` URL.
-5. In Vercel, set `VITE_ANALYTICS_API_URL` to that URL for Production.
-6. Redeploy the Vercel project so Vite includes the environment variable in its build.
+## Verification commands
 
-The Blueprint uses free Render services to avoid automatically selecting a paid
-plan. Render's free Key Value service does not provide disk persistence. Select a
-paid Key Value plan in Render when persistent production analytics are required.
+~~~sh
+npm test
+npm run lint
+npm run build
+~~~
 
-Build the frontend locally with `npm run build`. Vercel serves the generated Vite
-application and uses `vercel.json` to route React paths such as `/auth/callback`.
+From **daily-visitor-counter**:
+
+~~~sh
+docker compose ps
+~~~
+
+Both Docker services should report healthy before testing the local Analytics
+page.
+
+## Technology
+
+- React, TypeScript, Vite
+- Tailwind CSS and shadcn-ui
+- Supabase Authentication and PostgreSQL
+- Node.js and Express
+- Redis HyperLogLog, Set, and sorted set
+- Docker and Docker Compose
+- Vercel and Render
