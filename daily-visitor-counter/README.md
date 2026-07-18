@@ -102,6 +102,19 @@ Authenticated request:
 }
 ```
 
+After a successful authentication, the frontend sends:
+
+```json
+{
+  "visitorId": "user:550e8400-e29b-41d4-a716-446655440000",
+  "loginEvent": true
+}
+```
+
+Only authenticated identifiers with `loginEvent: true` increment the daily and
+all-time login counters. Ordinary page loads and refreshes still record the unique
+visitor but do not increment login counters.
+
 New visitor response:
 
 ```json
@@ -145,6 +158,8 @@ Statistics response:
 ```json
 {
   "date": "2026-07-17",
+  "allTimeUniqueVisitors": 250,
+  "allTimeReturningLoggedInVisitors": 40,
   "totalUniqueVisitors": 101,
   "loggedInUniqueVisitors": 60,
   "returningLoggedInVisitors": 15,
@@ -155,13 +170,20 @@ Statistics response:
 }
 ```
 
-`difference` is the exact count minus the estimate. Error percentage uses the
-absolute difference and returns zero when the exact count is zero.
+`GET /api/analytics/daily` includes `allTimeUniqueVisitors` and
+`allTimeReturningLoggedInVisitors`. The date-specific endpoint keeps the daily
+response fields shown above except for those all-time fields. `difference` is the
+exact count minus the estimate. Error percentage uses the absolute difference and
+returns zero when the exact count is zero.
 
+- `allTimeUniqueVisitors` counts each hashed visitor identifier once across all
+  stored dates.
+- `allTimeReturningLoggedInVisitors` counts authenticated users with at least
+  two successful login events across all stored dates.
 - `totalUniqueVisitors` counts all logged-in and anonymous visitors once per day.
 - `loggedInUniqueVisitors` counts authenticated visitors once per day.
-- `returningLoggedInVisitors` counts logged-in visitors with at least two separate
-  recorded browser sessions that day.
+- `returningLoggedInVisitors` counts authenticated users with at least two
+  successful login events that day.
 - `estimatedUniqueVisitors` is the HyperLogLog estimate across all visitors.
 
 ## Redis storage
@@ -173,12 +195,15 @@ visitors:hll:YYYY-MM-DD
 visitors:set:YYYY-MM-DD
 visitors:logged-in:set:YYYY-MM-DD
 visitors:logged-in:visits:YYYY-MM-DD
+visitors:set:all-time
+visitors:logged-in:visits:all-time
 ```
 
 The backend uses `PFADD` and `PFCOUNT` for the estimate, Sets for exact unique
-counts, and a sorted set for the number of logged-in sessions. Daily keys do not
-receive an expiration and remain available until they are manually deleted. The
-`redis-data` Docker volume preserves data across ordinary container restarts.
+counts, and sorted sets for successful login counts. The all-time Set and sorted
+set are backfilled from existing daily data when first created. Visitor keys do
+not receive an expiration and remain available until they are manually deleted.
+The `redis-data` Docker volume preserves data across ordinary container restarts.
 
 ## Local development without Docker
 

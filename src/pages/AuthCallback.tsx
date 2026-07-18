@@ -1,7 +1,13 @@
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import {
+  clearPendingGoogleLogin,
+  consumePendingGoogleLogin,
+  recordSuccessfulLogin,
+} from "@/lib/visitorAnalytics";
 
 function redirectToLogin() {
+  clearPendingGoogleLogin();
   window.location.replace("/login?oauth=failed");
 }
 
@@ -41,6 +47,12 @@ export default function AuthCallback() {
         console.error("Google OAuth session validation failed", error);
         redirectToLogin();
         return;
+      }
+
+      if (consumePendingGoogleLogin()) {
+        void recordSuccessfulLogin(data.user.id).catch(loginAnalyticsError => {
+          console.error("Login analytics error:", loginAnalyticsError);
+        });
       }
 
       window.location.replace("/dashboard");

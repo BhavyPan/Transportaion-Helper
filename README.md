@@ -47,12 +47,13 @@ Before the first start, copy `daily-visitor-counter/.env.example` to
 value of at least 32 characters.
 
 During local development, Vite proxies `/visitor-api` to
-`http://localhost:3000`. The dashboard and Analytics page show today's exact total,
-logged-in unique visitors, returning logged-in visitors, HyperLogLog estimate,
-difference, and error percentage. A returning logged-in visitor has at least two
-separate browser sessions on the same day; refreshes in one session do not count as
-another visit. Supabase remains responsible for authentication and fleet records;
-Redis is used only for visitor analytics.
+`http://localhost:3000`. The dashboard and Analytics page show the exact unique
+total across all stored dates, today's exact total, logged-in unique visitors,
+returning logged-in visitors for today and all time, HyperLogLog estimate,
+difference, and error percentage. A returning logged-in visitor has completed at
+least two successful sign-ins. Refreshes and restored Supabase sessions do not
+count as another login. Supabase remains responsible for authentication and fleet
+records; Redis is used only for visitor analytics.
 The API stores HMAC hashes instead of raw browser or Supabase IDs. Clearing browser
 storage, using incognito mode, another browser, or another device creates a new
 anonymous identity. Daily Redis keys do not expire automatically.

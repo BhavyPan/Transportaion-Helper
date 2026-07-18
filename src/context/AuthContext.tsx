@@ -1,5 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { getSupabaseConfigError, supabase } from "@/lib/supabase";
+import {
+    clearPendingGoogleLogin,
+    markGoogleLoginPending,
+    recordSuccessfulLogin,
+} from "@/lib/visitorAnalytics";
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 
 export type Role = "User" | "Manager" | "Dispatcher" | "Safety Officer" | "Finance";
@@ -48,6 +53,12 @@ const toUser = (profile: ProfileRow, authUser: SupabaseAuthUser): User => ({
     role: profile.role,
     avatarUrl: getAvatarUrl(authUser),
 });
+
+function recordLoginAnalytics(userId: string) {
+    void recordSuccessfulLogin(userId).catch(error => {
+        console.error("Login analytics error:", error);
+    });
+}
 
 async function loadProfile(authUser: SupabaseAuthUser) {
     if (!supabase) return null;
@@ -164,6 +175,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profile = await loadProfile(validatedUser.user);
         if (!profile) return { success: false, error: "Unable to load your user profile." };
 
+        recordLoginAnalytics(validatedUser.user.id);
         setUser(profile);
         return { success: true };
     };
@@ -173,6 +185,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return { success: false, error: getSupabaseConfigError() };
         }
 
+        markGoogleLoginPending();
+
         const { error } = await supabase.auth.signInWithOAuth({
             provider: "google",
             options: {
@@ -181,6 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (error) {
+            clearPendingGoogleLogin();
             console.error("Google OAuth failed to start", error);
             return { success: false, error: "Unable to start Google sign-in. Please try again." };
         }
@@ -214,6 +229,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const profile = await loadProfile(data.user);
         if (!profile) return { success: false, error: "Unable to create your user profile." };
 
+        recordLoginAnalytics(data.user.id);
         setUser(profile);
         return { success: true };
     };

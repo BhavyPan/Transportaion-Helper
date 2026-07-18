@@ -14,18 +14,30 @@ export default function DailyVisitorAnalytics({
   const visitorStats = useQuery({
     queryKey: ["daily-visitor-stats", "today"],
     queryFn: fetchTodayVisitorStats,
-    staleTime: Infinity,
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: 1,
   });
 
   const values = [
-    ["Total Visitors", visitorStats.data?.totalUniqueVisitors ?? "..."],
-    ["Logged-In Visitors", visitorStats.data?.loggedInUniqueVisitors ?? "..."],
     [
-      "Returning Logged-In Visitors",
+      "Total Visitors Till Now",
+      visitorStats.data?.allTimeUniqueVisitors ?? "...",
+    ],
+    ["Total Visitors Today", visitorStats.data?.totalUniqueVisitors ?? "..."],
+    [
+      "Logged-In Visitors Today",
+      visitorStats.data?.loggedInUniqueVisitors ?? "...",
+    ],
+    [
+      "Returning Logged-In Today",
       visitorStats.data?.returningLoggedInVisitors ?? "...",
+    ],
+    [
+      "Returning Logged-In Till Now",
+      visitorStats.data?.allTimeReturningLoggedInVisitors ?? "...",
     ],
     ["Estimated Visitors", visitorStats.data?.estimatedUniqueVisitors ?? "..."],
     ["Difference", visitorStats.data?.difference ?? "..."],
@@ -67,12 +79,12 @@ export default function DailyVisitorAnalytics({
           Visitor analytics is unavailable. The website remains available.
         </p>
       ) : (
-        <div className="grid grid-cols-2 border-t border-white/10 lg:grid-cols-3">
+        <div className="grid grid-cols-2 border-t border-white/10 lg:grid-cols-4">
           {values.map(([label, value], index) => (
             <div
               key={label}
               className={cn(
-                "min-h-28 border-white/10 px-6 py-5 lg:border-l lg:[&:nth-child(3n+1)]:border-l-0",
+                "min-h-28 border-white/10 px-6 py-5 lg:border-l lg:[&:nth-child(4n+1)]:border-l-0",
                 index % 2 === 1 && "border-l",
               )}
             >

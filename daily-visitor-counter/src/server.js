@@ -20,6 +20,8 @@ const allowedOrigins = new Set(
 
 const port = parsePositiveInteger(process.env.PORT, 'PORT');
 const appTimezone = getRequiredEnvironmentVariable('APP_TIMEZONE');
+const allTimeVisitorSetKey = 'visitors:set:all-time';
+const allTimeLoggedInVisitsKey = 'visitors:logged-in:visits:all-time';
 
 validateTimezone(appTimezone);
 validateIdentityConfiguration();
@@ -158,23 +160,30 @@ async function runRedisOperation(operation) {
   }
 }
 
-async function getStatistics(date) {
+async function getStatistics(date, includeAllTime = false) {
   const { hllKey, setKey, loggedInSetKey, loggedInVisitsKey } =
     getDailyKeys(date);
+  const transaction = redisClient
+    .multi()
+    .pfCount(hllKey)
+    .sCard(setKey)
+    .sCard(loggedInSetKey)
+    .zCount(loggedInVisitsKey, 2, '+inf');
+
+  if (includeAllTime) {
+    transaction
+      .sCard(allTimeVisitorSetKey)
+      .zCount(allTimeLoggedInVisitsKey, 2, '+inf');
+  }
+
   const [
     estimatedUniqueVisitors,
     exactUniqueVisitors,
     loggedInUniqueVisitors,
     returningLoggedInVisitors,
-  ] = await runRedisOperation(() =>
-    redisClient
-      .multi()
-      .pfCount(hllKey)
-      .sCard(setKey)
-      .sCard(loggedInSetKey)
-      .zCount(loggedInVisitsKey, 2, '+inf')
-      .exec(),
-  );
+    allTimeUniqueVisitors,
+    allTimeReturningLoggedInVisitors,
+  ] = await runRedisOperation(() => transaction.exec());
 
   const difference = exactUniqueVisitors - estimatedUniqueVisitors;
   const errorPercentage =
@@ -184,7 +193,7 @@ async function getStatistics(date) {
           ((Math.abs(difference) / exactUniqueVisitors) * 100).toFixed(2),
         );
 
-  return {
+  const statistics = {
     date,
     totalUniqueVisitors: exactUniqueVisitors,
     loggedInUniqueVisitors,
@@ -194,6 +203,78 @@ async function getStatistics(date) {
     difference,
     errorPercentage,
   };
+
+  if (includeAllTime) {
+    statistics.allTimeUniqueVisitors = allTimeUniqueVisitors;
+    statistics.allTimeReturningLoggedInVisitors =
+      allTimeReturningLoggedInVisitors;
+  }
+
+  return statistics;
+}
+
+async function backfillAllTimeVisitors() {
+  const dailySetKeys = [];
+
+  for await (const key of redisClient.scanIterator({
+    MATCH: 'visitors:set:*',
+    COUNT: 100,
+  })) {
+    if (/^visitors:set:\d{4}-\d{2}-\d{2}$/.test(key)) {
+      dailySetKeys.push(key);
+    }
+  }
+
+  if (dailySetKeys.length === 0) {
+    return;
+  }
+
+  await runRedisOperation(() =>
+    redisClient.sUnionStore(allTimeVisitorSetKey, [
+      allTimeVisitorSetKey,
+      ...dailySetKeys,
+    ]),
+  );
+}
+
+async function backfillAllTimeLoggedInVisits() {
+  const allTimeKeyExists = await runRedisOperation(() =>
+    redisClient.exists(allTimeLoggedInVisitsKey),
+  );
+
+  if (allTimeKeyExists) {
+    return;
+  }
+
+  const dailyLoggedInVisitsKeys = [];
+
+  for await (const key of redisClient.scanIterator({
+    MATCH: 'visitors:logged-in:visits:*',
+    COUNT: 100,
+  })) {
+    if (
+      /^visitors:logged-in:visits:[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(
+        key,
+      )
+    ) {
+      dailyLoggedInVisitsKeys.push(key);
+    }
+  }
+
+  if (dailyLoggedInVisitsKeys.length === 0) {
+    return;
+  }
+
+  await runRedisOperation(() =>
+    redisClient.sendCommand([
+      'ZUNIONSTORE',
+      allTimeLoggedInVisitsKey,
+      String(dailyLoggedInVisitsKeys.length),
+      ...dailyLoggedInVisitsKeys,
+      'AGGREGATE',
+      'SUM',
+    ]),
+  );
 }
 
 app.get('/', (request, response) => {
@@ -232,16 +313,23 @@ app.post('/api/analytics/visit', async (request, response, next) => {
     const { hllKey, setKey, loggedInSetKey, loggedInVisitsKey } =
       getDailyKeys(date);
     const isLoggedInVisitor = visitorId.startsWith('user:');
+    const isLoginEvent =
+      isLoggedInVisitor && request.body?.loginEvent === true;
 
     const transaction = redisClient
       .multi()
       .pfAdd(hllKey, visitorHash)
-      .sAdd(setKey, visitorHash);
+      .sAdd(setKey, visitorHash)
+      .sAdd(allTimeVisitorSetKey, visitorHash);
 
     if (isLoggedInVisitor) {
+      transaction.sAdd(loggedInSetKey, visitorHash);
+    }
+
+    if (isLoginEvent) {
       transaction
-        .sAdd(loggedInSetKey, visitorHash)
-        .zIncrBy(loggedInVisitsKey, 1, visitorHash);
+        .zIncrBy(loggedInVisitsKey, 1, visitorHash)
+        .zIncrBy(allTimeLoggedInVisitsKey, 1, visitorHash);
     }
 
     const [, exactVisitorAdded] = await runRedisOperation(() =>
@@ -266,7 +354,7 @@ app.post('/api/analytics/visit', async (request, response, next) => {
 app.get('/api/analytics/daily', async (request, response, next) => {
   try {
     const date = getCurrentDate(appTimezone);
-    return response.json(await getStatistics(date));
+    return response.json(await getStatistics(date, true));
   } catch (error) {
     return next(error);
   }
@@ -327,6 +415,8 @@ let isShuttingDown = false;
 async function startServer() {
   try {
     await connectRedis();
+    await backfillAllTimeVisitors();
+    await backfillAllTimeLoggedInVisits();
     httpServer = app.listen(port, '0.0.0.0', () => {
       console.log(`Server is running on port ${port}`);
     });

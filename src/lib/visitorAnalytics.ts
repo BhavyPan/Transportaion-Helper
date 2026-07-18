@@ -4,12 +4,15 @@ const visitorApiBaseUrl = (
 
 const anonymousVisitorStorageKey = "transportation_helper_visitor_id";
 const recordedVisitSessionPrefix = "transportation_helper_visit_recorded";
+const pendingGoogleLoginKey = "transportation_helper_google_login_pending";
 const pendingVisitorIds = new Set<string>();
 const anonymousIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface DailyVisitorStats {
   date: string;
+  allTimeUniqueVisitors: number;
+  allTimeReturningLoggedInVisitors: number;
   totalUniqueVisitors: number;
   loggedInUniqueVisitors: number;
   returningLoggedInVisitors: number;
@@ -64,6 +67,38 @@ export async function recordDailyVisit(visitorId: string) {
     },
     "Unable to record visitor",
   );
+}
+
+export async function recordSuccessfulLogin(userId: string) {
+  return requestVisitorApi<RecordedDailyVisit>(
+    "/api/analytics/visit",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        visitorId: `user:${userId}`,
+        loginEvent: true,
+      }),
+      keepalive: true,
+    },
+    "Unable to record login analytics",
+  );
+}
+
+export function markGoogleLoginPending() {
+  sessionStorage.setItem(pendingGoogleLoginKey, "true");
+}
+
+export function clearPendingGoogleLogin() {
+  sessionStorage.removeItem(pendingGoogleLoginKey);
+}
+
+export function consumePendingGoogleLogin() {
+  const isPending = sessionStorage.getItem(pendingGoogleLoginKey) === "true";
+  clearPendingGoogleLogin();
+  return isPending;
 }
 
 export async function recordVisitOncePerSession(visitorId: string) {

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  consumePendingGoogleLogin,
   getAnonymousVisitorId,
+  markGoogleLoginPending,
   recordDailyVisit,
+  recordSuccessfulLogin,
   recordVisitOncePerSession,
 } from "./visitorAnalytics";
 
@@ -70,5 +73,27 @@ describe("visitor analytics identity", () => {
     await recordVisitOncePerSession("user:session-user");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("records an explicit successful login event", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(successfulResponse as unknown as Response);
+
+    await recordSuccessfulLogin("verified-supabase-user-id");
+
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(request.body as string)).toEqual({
+      visitorId: "user:verified-supabase-user-id",
+      loginEvent: true,
+    });
+    expect(request.keepalive).toBe(true);
+  });
+
+  it("consumes a pending Google login only once", () => {
+    markGoogleLoginPending();
+
+    expect(consumePendingGoogleLogin()).toBe(true);
+    expect(consumePendingGoogleLogin()).toBe(false);
   });
 });
